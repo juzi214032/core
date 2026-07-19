@@ -7,7 +7,7 @@ import pytest
 from pytraccar import TraccarAuthenticationException, TraccarException
 
 from homeassistant import config_entries
-from homeassistant.components.traccar_server.const import (
+from homeassistant.components.juzi_traccar_server.const import (
     CONF_CUSTOM_ATTRIBUTES,
     CONF_EVENTS,
     CONF_MAX_ACCURACY,

@@ -2,7 +2,7 @@
 
 from logging import getLogger
 
-DOMAIN = "traccar_server"
+DOMAIN = "juzi_traccar_server"
 LOGGER = getLogger(__package__)
 
 ATTR_ADDRESS = "address"

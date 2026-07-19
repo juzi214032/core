@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from pytraccar import ApiClient, SubscriptionStatus
 
-from homeassistant.components.traccar_server.const import (
+from homeassistant.components.juzi_traccar_server.const import (
     CONF_CUSTOM_ATTRIBUTES,
     CONF_EVENTS,
     CONF_MAX_ACCURACY,
@@ -33,30 +33,30 @@ def mock_traccar_api_client() -> Generator[AsyncMock]:
     """Mock a Traccar ApiClient client."""
     with (
         patch(
-            "homeassistant.components.traccar_server.ApiClient",
+            "homeassistant.components.juzi_traccar_server.ApiClient",
             autospec=True,
         ) as mock_client,
         patch(
-            "homeassistant.components.traccar_server.config_flow.ApiClient",
+            "homeassistant.components.juzi_traccar_server.config_flow.ApiClient",
             new=mock_client,
         ),
     ):
         client: ApiClient = mock_client.return_value
         client.subscription_status = SubscriptionStatus.DISCONNECTED
         client.get_devices.return_value = load_json_array_fixture(
-            "traccar_server/devices.json"
+            "juzi_traccar_server/devices.json"
         )
         client.get_geofences.return_value = load_json_array_fixture(
-            "traccar_server/geofences.json"
+            "juzi_traccar_server/geofences.json"
         )
         client.get_positions.return_value = load_json_array_fixture(
-            "traccar_server/positions.json"
+            "juzi_traccar_server/positions.json"
         )
         client.get_server.return_value = load_json_object_fixture(
-            "traccar_server/server.json"
+            "juzi_traccar_server/server.json"
         )
         client.get_reports_events.return_value = load_json_array_fixture(
-            "traccar_server/reports_events.json"
+            "juzi_traccar_server/reports_events.json"
         )
 
         client.subscribe = AsyncMock()

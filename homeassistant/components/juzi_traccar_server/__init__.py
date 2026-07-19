@@ -72,7 +72,7 @@ async def async_setup_entry(
                 coordinator.import_events,
                 timedelta(seconds=30),
                 cancel_on_shutdown=True,
-                name="traccar_server_import_events",
+                name=f"{DOMAIN}_import_events",
             )
         )
 

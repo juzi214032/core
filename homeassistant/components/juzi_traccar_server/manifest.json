@@ -1,6 +1,6 @@
 {
-  "domain": "traccar_server",
-  "name": "Traccar Server",
+  "domain": "juzi_traccar_server",
+  "name": "Traccar Server(By Juzi)",
   "codeowners": [],
   "config_flow": true,
   "documentation": "https://www.home-assistant.io/integrations/traccar_server",
