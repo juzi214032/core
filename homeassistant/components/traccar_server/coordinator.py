@@ -210,9 +210,24 @@ class TraccarServerCoordinator(DataUpdateCoordinator[TraccarServerCoordinatorDat
         if not events:
             return
 
+        GEOFENCE_EVENT_TYPES = ("geofenceEnter", "geofenceExit")
+
         self._last_event_import = start_time
         for event in events:
             device = self.data[event["deviceId"]]["device"]
+            event_data = {
+                "device_traccar_id": event["deviceId"],
+                "device_name": device["name"] if device else None,
+                "type": event["type"],
+                "serverTime": event["eventTime"],
+                "attributes": event["attributes"],
+            }
+            if event["type"] in GEOFENCE_EVENT_TYPES:
+                geofence = get_first_geofence(
+                    self._geofences, [event["geofenceId"]]
+                )
+                event_data["geofence_id"] = event["geofenceId"]
+                event_data["geofence_name"] = geofence["name"] if geofence else None
             self.hass.bus.async_fire(
                 # This goes against two of the HA core guidelines:
                 # 1. Event names should be prefixed with the domain name of
@@ -222,13 +237,7 @@ class TraccarServerCoordinator(DataUpdateCoordinator[TraccarServerCoordinatorDat
                 # However, to not break it for those who currently use
                 # the "old" integration, this is kept as is.
                 f"traccar_{EVENTS[event['type']]}",
-                {
-                    "device_traccar_id": event["deviceId"],
-                    "device_name": device["name"] if device else None,
-                    "type": event["type"],
-                    "serverTime": event["eventTime"],
-                    "attributes": event["attributes"],
-                },
+                event_data,
             )
 
     async def subscribe(self) -> None:
