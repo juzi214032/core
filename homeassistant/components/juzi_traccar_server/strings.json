@@ -63,6 +63,12 @@
       },
       "power": {
         "name": "Supply voltage"
+      },
+      "battery_level": {
+        "name": "Battery level"
+      },
+      "speed": {
+        "name": "Speed"
       }
     }
   },

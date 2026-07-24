@@ -1,6 +1,7 @@
 """Data update coordinator for Traccar Server."""
 
 import asyncio
+from collections import deque
 from datetime import datetime
 from logging import DEBUG as LOG_LEVEL_DEBUG
 from typing import TYPE_CHECKING, Any, TypedDict, override
@@ -11,6 +12,7 @@ from pytraccar import (
     GeofenceModel,
     PositionModel,
     SubscriptionData,
+    SubscriptionStatus,
     TraccarAuthenticationException,
     TraccarException,
 )
@@ -77,6 +79,7 @@ class TraccarServerCoordinator(DataUpdateCoordinator[TraccarServerCoordinatorDat
         self._geofences: list[GeofenceModel] = []
         self._last_event_import: datetime | None = None
         self._should_log_subscription_error: bool = True
+        self._seen_event_ids: deque[int] = deque(maxlen=1000)
 
     @override
     async def _async_update_data(self) -> TraccarServerCoordinatorData:
@@ -193,8 +196,21 @@ class TraccarServerCoordinator(DataUpdateCoordinator[TraccarServerCoordinatorDat
         for device_id in update_devices:
             async_dispatcher_send(self.hass, f"{DOMAIN}_{device_id}")
 
+        for event in data.get("events") or []:
+            if (device_id := event["deviceId"]) not in self.data:
+                self.logger.debug(
+                    "Device %s for event %s not found in data",
+                    device_id,
+                    event["id"],
+                )
+                continue
+            self._fire_event(event)
+
     async def import_events(self, _: datetime) -> None:
         """Import events from Traccar."""
+        if self.client.subscription_status == SubscriptionStatus.CONNECTED:
+            return
+
         start_time = dt_util.utcnow().replace(tzinfo=None)
         end_time: datetime | None
 
@@ -212,35 +228,44 @@ class TraccarServerCoordinator(DataUpdateCoordinator[TraccarServerCoordinatorDat
         if not events:
             return
 
-        GEOFENCE_EVENT_TYPES = ("geofenceEnter", "geofenceExit")
-
         self._last_event_import = start_time
         for event in events:
-            device = self.data[event["deviceId"]]["device"]
-            event_data = {
-                "device_traccar_id": event["deviceId"],
-                "device_name": device["name"] if device else None,
-                "type": event["type"],
-                "serverTime": event["eventTime"],
-                "attributes": event["attributes"],
-            }
-            if event["type"] in GEOFENCE_EVENT_TYPES:
-                geofence = get_first_geofence(
-                    self._geofences, [event["geofenceId"]]
-                )
-                event_data["geofence_id"] = event["geofenceId"]
-                event_data["geofence_name"] = geofence["name"] if geofence else None
-            self.hass.bus.async_fire(
-                # This goes against two of the HA core guidelines:
-                # 1. Event names should be prefixed with the domain name of
-                #    the integration
-                # 2. This should be event entities
-                #
-                # However, to not break it for those who currently use
-                # the "old" integration, this is kept as is.
-                f"traccar_{EVENTS[event['type']]}",
-                event_data,
+            self._fire_event(event)
+
+    def _fire_event(self, event: dict[str, Any]) -> None:
+        """Fire a HA bus event, deduplicating by event ID."""
+        event_id = event["id"]
+        if event_id in self._seen_event_ids:
+            return
+        self._seen_event_ids.append(event_id)
+
+        GEOFENCE_EVENT_TYPES = ("geofenceEnter", "geofenceExit")
+
+        device = self.data[event["deviceId"]]["device"]
+        event_data = {
+            "device_traccar_id": event["deviceId"],
+            "device_name": device["name"],
+            "type": event["type"],
+            "serverTime": event["eventTime"],
+            "attributes": event["attributes"],
+        }
+        if event["type"] in GEOFENCE_EVENT_TYPES:
+            geofence = get_first_geofence(
+                self._geofences, [event["geofenceId"]]
             )
+            event_data["geofence_id"] = event["geofenceId"]
+            event_data["geofence_name"] = geofence["name"] if geofence else None
+        self.hass.bus.async_fire(
+            # This goes against two of the HA core guidelines:
+            # 1. Event names should be prefixed with the domain name of
+            #    the integration
+            # 2. This should be event entities
+            #
+            # However, to not break it for those who currently use
+            # the "old" integration, this is kept as is.
+            f"traccar_{EVENTS[event['type']]}",
+            event_data,
+        )
 
     async def subscribe(self) -> None:
         """Subscribe to events."""
