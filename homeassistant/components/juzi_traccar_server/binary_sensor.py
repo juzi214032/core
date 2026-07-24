@@ -35,14 +35,14 @@ TRACCAR_SERVER_BINARY_SENSOR_ENTITY_DESCRIPTIONS: tuple[
     TraccarServerBinarySensorEntityDescription[DeviceModel](
         key="attributes.motion",
         data_key="position",
-        translation_key="motion",
+        name="Motion",
         device_class=BinarySensorDeviceClass.MOTION,
         value_fn=lambda x: x["attributes"].get("motion", False),
     ),
     TraccarServerBinarySensorEntityDescription[DeviceModel](
         key="status",
         data_key="device",
-        translation_key="status",
+        name="Status",
         value_fn=lambda x: None if (s := x["status"]) == "unknown" else s == "online",
     ),
 )
