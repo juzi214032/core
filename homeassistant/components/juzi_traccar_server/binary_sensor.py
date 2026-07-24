@@ -24,7 +24,7 @@ class TraccarServerBinarySensorEntityDescription[_T](BinarySensorEntityDescripti
     """Describe Traccar Server sensor entity."""
 
     data_key: Literal["position", "device", "geofence", "attributes"]
-    entity_registry_enabled_default = False
+    entity_registry_enabled_default = True
     entity_category = EntityCategory.DIAGNOSTIC
     value_fn: Callable[[_T], bool | None]
 
