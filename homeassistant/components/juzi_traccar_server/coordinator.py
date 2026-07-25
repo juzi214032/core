@@ -78,7 +78,7 @@ class TraccarServerCoordinator(DataUpdateCoordinator[TraccarServerCoordinatorDat
         )
         self._geofences: list[GeofenceModel] = []
         self._last_event_import: datetime | None = None
-        self._should_log_subscription_error: bool = True
+        self._connection_logged: bool = False
         self._seen_event_ids: deque[int] = deque(maxlen=1000)
 
     @override
@@ -149,7 +149,9 @@ class TraccarServerCoordinator(DataUpdateCoordinator[TraccarServerCoordinatorDat
     async def handle_subscription_data(self, data: SubscriptionData) -> None:
         """Handle subscription data."""
         self.logger.debug("Received subscription data: %s", data)
-        self._should_log_subscription_error = True
+        if not self._connection_logged:
+            self._connection_logged = True
+            LOGGER.info("Traccar WebSocket connected, receiving data")
         get_custom_attrs = (
             self._return_custom_attributes_if_not_filtered_by_accuracy_configuration
         )
@@ -269,17 +271,29 @@ class TraccarServerCoordinator(DataUpdateCoordinator[TraccarServerCoordinatorDat
 
     async def subscribe(self) -> None:
         """Subscribe to events."""
-        try:
-            await self.client.subscribe(self.handle_subscription_data)
-        except TraccarAuthenticationException:
-            raise ConfigEntryAuthFailed from None
-        except TraccarException as ex:
-            if self._should_log_subscription_error:
-                self._should_log_subscription_error = False
-                LOGGER.error("Error while subscribing to Traccar: %s", ex)
-            # Retry after 10 seconds
-            await asyncio.sleep(10)
-            await self.subscribe()
+        while True:
+            LOGGER.info("Connecting to Traccar WebSocket subscription")
+            self._connection_logged = False
+            try:
+                await self.client.subscribe(self.handle_subscription_data)
+            except TraccarAuthenticationException:
+                raise ConfigEntryAuthFailed from None
+            except TraccarException as ex:
+                LOGGER.error(
+                    "Traccar WebSocket connection failed: %s; retrying in 60 seconds",
+                    ex,
+                )
+            else:
+                # pytraccar swallows CancelledError and returns with status
+                # DISCONNECTED; stop instead of reconnecting during unload.
+                if self.client.subscription_status == SubscriptionStatus.DISCONNECTED:
+                    return
+                # pytraccar also returns without raising when the server
+                # closes the WebSocket gracefully; reconnect in that case.
+                LOGGER.warning(
+                    "Traccar WebSocket connection closed; retrying in 60 seconds"
+                )
+            await asyncio.sleep(60)
 
     def _return_custom_attributes_if_not_filtered_by_accuracy_configuration(
         self,

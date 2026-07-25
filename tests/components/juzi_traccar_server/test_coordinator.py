@@ -1,10 +1,11 @@
 """Test Traccar Server coordinator event handling."""
 
-from collections.abc import Generator
+from collections.abc import Awaitable, Callable, Generator
 from datetime import datetime
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
+from pytraccar import SubscriptionData, SubscriptionStatus
 
 from homeassistant.components.juzi_traccar_server.coordinator import (
     TraccarServerCoordinator,
@@ -96,3 +97,31 @@ async def test_non_geofence_event_does_not_have_geofence_fields(
     event_data = events[0].data
     assert "geofence_id" not in event_data
     assert "geofence_name" not in event_data
+
+
+async def test_subscribe_reconnects_after_graceful_websocket_close(
+    hass: HomeAssistant,
+    mock_traccar_api_client: Generator[AsyncMock],
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """Test the subscription reconnects when the server closes the WebSocket."""
+    await setup_integration(hass, mock_config_entry)
+
+    coordinator: TraccarServerCoordinator = mock_config_entry.runtime_data
+    statuses = [SubscriptionStatus.CONNECTED, SubscriptionStatus.DISCONNECTED]
+
+    async def _subscribe(
+        callback: Callable[[SubscriptionData], Awaitable[None]],
+    ) -> None:
+        mock_traccar_api_client.subscription_status = statuses.pop(0)
+
+    mock_traccar_api_client.subscribe.reset_mock()
+    mock_traccar_api_client.subscribe.side_effect = _subscribe
+
+    with patch(
+        "homeassistant.components.juzi_traccar_server.coordinator.asyncio.sleep"
+    ) as mock_sleep:
+        await coordinator.subscribe()
+
+    assert mock_traccar_api_client.subscribe.call_count == 2
+    mock_sleep.assert_awaited_once_with(60)
